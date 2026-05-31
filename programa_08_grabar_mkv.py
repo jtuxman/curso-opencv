@@ -22,6 +22,8 @@ while True:
     if not ret:
         break
 
+    frame = cv2.flip(frame, 1)
+
     if grabando and writer is not None:
         writer.write(frame)
 
