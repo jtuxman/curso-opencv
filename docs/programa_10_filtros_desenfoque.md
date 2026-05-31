@@ -47,107 +47,158 @@ cv2.destroyAllWindows()
 
 ## Concepto: ¿para qué sirve el desenfoque?
 
-El desenfoque no es solo un efecto visual — tiene usos prácticos en visión por computadora:
+El desenfoque no es solo un efecto visual — tiene usos importantes en visión por computadora:
 
-| Uso | Filtro recomendado |
-|---|---|
-| Eliminar ruido antes de Canny (prog 06) | Gaussiano |
-| Eliminar ruido tipo sal y pimienta | Mediano |
-| Suavizar preservando bordes (piel, segmentación) | Bilateral |
-| Velocidad máxima en tiempo real | Gaussiano |
+| Uso | Descripción | Filtro recomendado |
+|---|---|---|
+| Eliminar ruido antes de Canny | Suavizar antes de detectar bordes (prog. 06) | Gaussiano |
+| Eliminar ruido sal y pimienta | Píxeles blancos/negros aislados | Mediano |
+| Suavizar preservando contornos | Difuminar sin perder bordes | Bilateral |
+| Efecto de privacidad | Censurar rostros o textos | Gaussiano con kernel grande |
 
 ---
 
-## Funciones nuevas en este programa
+## Funciones en este programa
 
-### `cv2.GaussianBlur(src, ksize, sigmaX)` *(repaso)*
+### `cv2.GaussianBlur(src, ksize, sigmaX)` *(repaso de prog. 06)*
 
-Ya vista en el programa 06, ahora se aplica sobre el frame BGR completo en lugar
-de solo sobre la imagen en gris.
+Aplica desenfoque gaussiano. Cada píxel se reemplaza por el **promedio ponderado** de sus vecinos (píxeles más cercanos tienen más peso).
+
+| Parámetro | Tipo | Descripción |
+|---|---|---|
+| `src` | `ndarray` | Imagen de entrada (1 o 3 canales). |
+| `ksize` | `tuple (w, h)` | Tamaño del kernel. Debe ser impar: 3, 5, 7, 9... |
+| `sigmaX` | `float` | Desviación estándar. `0` = calculada automáticamente. |
+
+**Ejemplos:**
 
 ```python
-suave = cv2.GaussianBlur(frame, (15, 15), 0)
-```
+# Niveles de desenfoque (kernel mayor = más borroso):
+leve   = cv2.GaussianBlur(frame, (3, 3), 0)    # apenas perceptible
+medio  = cv2.GaussianBlur(frame, (15, 15), 0)  # este programa
+fuerte = cv2.GaussianBlur(frame, (31, 31), 0)  # muy borroso
+extremo = cv2.GaussianBlur(frame, (51, 51), 0) # efecto privacidad
 
-Cuanto mayor el kernel, mayor el desenfoque. Siempre debe ser impar: 3, 5, 7, 15...
+# Censurar una región del frame (efecto privacidad/mosaico):
+y1, y2, x1, x2 = 100, 200, 150, 300           # coordenadas de la región
+region = frame[y1:y2, x1:x2]                  # recortar la región
+censurada = cv2.GaussianBlur(region, (51, 51), 0)  # difuminar fuertemente
+frame[y1:y2, x1:x2] = censurada               # reemplazar en el frame
+
+# Aplicar antes de Canny para reducir falsos bordes:
+gris    = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+suave   = cv2.GaussianBlur(gris, (5, 5), 0)
+bordes  = cv2.Canny(suave, 50, 150)
+```
 
 ---
 
 ### `cv2.medianBlur(src, ksize)`
 
-Reemplaza cada píxel por la **mediana** de sus vecinos dentro del kernel.
+Reemplaza cada píxel por la **mediana** (valor del centro al ordenar) de sus vecinos. Elimina eficazmente el ruido tipo "sal y pimienta".
 
 | Parámetro | Tipo | Descripción |
 |---|---|---|
-| `src` | `ndarray` | Imagen de entrada (funciona con 1 o 3 canales). |
-| `ksize` | `int` | Tamaño del kernel. Debe ser impar y positivo. |
+| `src` | `ndarray` | Imagen de entrada (1 o 3 canales). |
+| `ksize` | `int` | Tamaño del kernel cuadrado. Debe ser impar y mayor que 1. |
 
-**Retorna:** `ndarray` — imagen filtrada.
+**Retorna:** `ndarray` — imagen filtrada. No modifica la original.
+
+**Cómo funciona la mediana:**
+
+```
+Vecindad 3x3 de un píxel (9 valores):
+[10][20][200]
+[15][18][22 ]   → ordenados: [10, 15, 17, 18, 19, 20, 21, 22, 200]
+[19][17][21 ]   → mediana (posición central): 19
+
+El valor 200 (ruido blanco) no afecta el resultado.
+Un promedio daría: (10+15+200+...) / 9 = 38 ← contaminado por el ruido
+La mediana da: 19 ← valor representativo sin contaminación
+```
+
+**Ejemplos:**
 
 ```python
-salida = cv2.medianBlur(frame, 5)    # kernel 5x5
-salida = cv2.medianBlur(frame, 15)   # más suave
+# Diferentes tamaños de kernel:
+suave3  = cv2.medianBlur(frame, 3)    # kernel 3x3, suave
+suave7  = cv2.medianBlur(frame, 7)    # kernel 7x7, más agresivo
+suave15 = cv2.medianBlur(frame, 15)   # este programa
+
+# Caso de uso: limpiar una imagen con ruido sal y pimienta:
+# (simular ruido para ver el efecto)
+import numpy as np
+frame_ruidoso = frame.copy()
+# agregar píxeles blancos y negros aleatorios:
+ruido = np.random.randint(0, 2, frame.shape[:2])
+frame_ruidoso[ruido == 0] = 0    # píxeles negros (sal)
+frame_ruidoso[ruido == 1] = 255  # píxeles blancos (pimienta)
+
+limpio = cv2.medianBlur(frame_ruidoso, 5)   # elimina el ruido eficazmente
+
+# Comparación visual:
+cv2.imshow("Con ruido", frame_ruidoso)
+cv2.imshow("Limpio",    limpio)
 ```
-
-#### Cómo funciona la mediana
-
-Para cada píxel, toma todos los valores en su vecindad (ej. 5×5 = 25 píxeles),
-los ordena y elige el del centro (la mediana).
-
-```
-Vecindad 3x3:   [10, 20, 200, 15, 18, 22, 19, 17, 21]
-Ordenados:      [10, 15, 17, 18, 19, 20, 21, 22, 200]
-Mediana:        19   ← el 200 (ruido) queda eliminado
-```
-
-> **Ventaja sobre Gaussiano:** el filtro mediano elimina valores extremos
-> (píxeles blancos o negros aislados = ruido *sal y pimienta*) sin que esos
-> valores afecten el resultado, ya que la mediana ignora los extremos.
 
 ---
 
 ### `cv2.bilateralFilter(src, d, sigmaColor, sigmaSpace)`
 
-Desenfoca la imagen pero **preserva los bordes**. Es más lento que los otros
-dos pero produce resultados de mayor calidad visual.
+Desenfoca la imagen **preservando los bordes**. Es más lento que los anteriores pero produce mejor resultado visual porque no mezcla colores muy distintos entre sí.
 
 | Parámetro | Tipo | Descripción |
 |---|---|---|
-| `src` | `ndarray` | Imagen de entrada (solo 8-bit o float). |
-| `d` | `int` | Diámetro del vecindario de cada píxel. `-1` lo calcula desde `sigmaSpace`. |
-| `sigmaColor` | `float` | Rango de colores a mezclar. Mayor valor = mezcla colores más distintos. |
-| `sigmaSpace` | `float` | Influencia de píxeles lejanos. Mayor valor = área de influencia más grande. |
+| `src` | `ndarray` | Imagen de entrada (solo `uint8` o `float32`). |
+| `d` | `int` | Diámetro del vecindario. `-1` lo calcula desde `sigmaSpace`. |
+| `sigmaColor` | `float` | Rango de colores a mezclar. Mayor = mezcla colores más distintos. |
+| `sigmaSpace` | `float` | Influencia espacial. Mayor = toma en cuenta píxeles más lejanos. |
 
-**Retorna:** `ndarray` — imagen filtrada con bordes preservados.
+**Retorna:** `ndarray` — imagen filtrada con bordes preservados. No modifica la original.
 
-```python
-salida = cv2.bilateralFilter(frame, 9, 75, 75)   # balance general
-salida = cv2.bilateralFilter(frame, 9, 150, 150) # más suavizado
+**Cómo funciona (concepto):**
+
+Un filtro gaussiano aplica un solo peso (distancia espacial). El bilateral aplica **dos pesos simultáneos**:
+
+```
+Peso del píxel vecino = peso_espacial × peso_color
+
+peso_espacial: píxeles más cercanos tienen mayor influencia
+               (igual que en gaussiano)
+
+peso_color:    píxeles con color SIMILAR tienen mayor influencia
+               píxeles con color MUY DIFERENTE tienen influencia casi nula
+               → los bordes (cambio brusco de color) no se suavizan
 ```
 
-#### Cómo funciona (concepto)
+```
+Zona uniforme (pared):         Borde (pared → persona):
+[200][198][201][199]           [200][199][80][82]
+    ↑ colores similares             ↑ cambio brusco
+    → se mezclan con peso alto      → peso bajo, NO se mezclan
+    → zona suavizada                → borde preservado
+```
 
-Un filtro gaussiano trata igual a todos los píxeles vecinos. El bilateral
-aplica **dos pesos**:
+**Ejemplos:**
 
-1. **Peso espacial** (`sigmaSpace`): píxeles más cercanos influyen más (igual que gaussiano).
-2. **Peso de color** (`sigmaColor`): píxeles con color similar influyen más; píxeles
-   muy distintos (bordes) influyen poco.
+```python
+# Diferentes niveles de bilateralFilter:
+suave   = cv2.bilateralFilter(frame, 5,  50,  50)   # tiempo real, poco efecto
+balance = cv2.bilateralFilter(frame, 9,  75,  75)   # este programa
+fuerte  = cv2.bilateralFilter(frame, 9,  150, 150)  # más suavizado, más lento
+extremo = cv2.bilateralFilter(frame, 15, 200, 200)  # muy lento, muy suave
 
-El resultado: zonas uniformes se suavizan, pero los bordes donde hay un cambio
-brusco de color se conservan nítidos.
+# Efecto "filtro de belleza" (suavizar piel preservando ojos/boca):
+suavizado = cv2.bilateralFilter(frame, 9, 75, 75)
+cv2.imshow("Efecto suavizado", suavizado)
 
-#### Guía de valores
+# Guía de valores:
+# d=5,  sigma=50  → rápido, efecto sutil
+# d=9,  sigma=75  → balance rendimiento/calidad
+# d=15, sigma=150 → lento, efecto pronunciado
 
-| Objetivo | d | sigmaColor | sigmaSpace |
-|---|---|---|---|
-| Tiempo real (rápido) | 5 | 50 | 50 |
-| Balance general | 9 | 75 | 75 |
-| Máximo suavizado | 15 | 150 | 150 |
-
-> **Rendimiento:** `bilateralFilter` es significativamente más lento que
-> `GaussianBlur` y `medianBlur`. Con `d=9` es usable en tiempo real;
-> valores mayores pueden bajar el FPS notablemente.
+# ADVERTENCIA: d > 9 puede bajar el FPS notablemente en tiempo real
+```
 
 ---
 
@@ -156,27 +207,47 @@ brusco de color se conservan nítidos.
 | Característica | Gaussiano | Mediano | Bilateral |
 |---|---|---|---|
 | Velocidad | Muy rápido | Rápido | Lento |
-| Elimina ruido general | Sí | Sí | Sí |
-| Elimina ruido sal/pimienta | Regular | Muy bien | Regular |
-| Preserva bordes | No | Parcialmente | Sí |
-| Uso típico | Pre-procesado general | Ruido puntual | Efectos visuales, piel |
+| Suaviza zonas uniformes | Sí | Sí | Sí |
+| Elimina ruido aleatorio | Sí | Sí | Sí |
+| Elimina ruido sal/pimienta | Parcial | Excelente | Parcial |
+| Preserva bordes | No — los suaviza | Parcialmente | Sí — los mantiene nítidos |
+| Uso típico | Pre-procesado, privacidad | Imágenes con ruido puntual | Suavizar piel, segmentación |
+| Kernel válido | Impar: 3, 5, 7... | Impar: 3, 5, 7... | `d` cualquier entero |
+
+### Visualización del efecto en bordes
+
+```
+Imagen original:
+[10][10][10][10][200][200][200][200]
+                  ↑ borde
+
+Gaussiano (kernel 5):
+[10][10][15][82][128][185][200][200]   ← borde difuminado (se "esparce")
+
+Mediano (kernel 5):
+[10][10][10][10][200][200][200][200]   ← borde preservado
+
+Bilateral (d=9):
+[10][10][10][10][200][200][200][200]   ← borde preservado + zonas suavizadas
+```
 
 ---
 
-## Diferencia con programas anteriores
+## Diferencia con prog. 06 (donde también aparece GaussianBlur)
 
-| Aspecto | Prog 06 (bordes) | Prog 10 (desenfoque) |
+| Aspecto | Prog. 06 | Prog. 10 |
 |---|---|---|
-| `GaussianBlur` | Solo en gris, pre-proceso | En color, como efecto final |
-| Filtros nuevos | — | `medianBlur`, `bilateralFilter` |
-| Propósito | Reducir ruido antes de Canny | Comparar efectos visuales |
+| Propósito del blur | Pre-procesado para reducir falsos bordes en Canny | Efecto visual final |
+| Canal de entrada | Gris (1 canal) | BGR color (3 canales) |
+| Tamaño del kernel | Pequeño `(5,5)` — solo eliminar ruido | Grande `(15,15)` — efecto visible |
+| Resultado | Se descarta, solo sirve para Canny | Se muestra en pantalla |
 
 ---
 
 ## Conceptos clave
 
-- `GaussianBlur`: rápido, uso general, para pre-procesado.
-- `medianBlur`: ideal para ruido tipo sal y pimienta (píxeles aislados muy claros u oscuros).
-- `bilateralFilter`: más lento, preserva bordes — útil para suavizar piel o segmentación.
+- `GaussianBlur`: rápido, para pre-procesado y privacidad.
+- `medianBlur`: ideal para ruido tipo sal y pimienta (píxeles aislados blancos/negros).
+- `bilateralFilter`: más lento, el único que preserva los bordes correctamente.
 - Los tres kernels deben ser de tamaño impar.
-- En tiempo real preferir `GaussianBlur`; `bilateralFilter` con `d` pequeño si se necesita preservar bordes.
+- Para tiempo real preferir Gaussiano; bilateralFilter con `d` pequeño si se necesita preservar bordes.

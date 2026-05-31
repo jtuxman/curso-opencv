@@ -1,6 +1,6 @@
-# Programa 08 — Grabar video en MKV
+# Programa 08 — Grabar video en MKV con efecto espejo
 
-Igual que el programa 07 pero guarda en formato MKV usando el codec XVID. Presiona `r` para iniciar/detener la grabación, `q` para salir.
+Graba en formato MKV con codec XVID. El video se graba en espejo (volteado horizontalmente). Presiona `r` para iniciar/detener la grabación, `q` para salir.
 
 ```python
 import cv2
@@ -24,6 +24,8 @@ while True:
 
     if not ret:
         break
+
+    frame = cv2.flip(frame, 1)     # voltear antes de grabar y mostrar
 
     if grabando and writer is not None:
         writer.write(frame)
@@ -60,80 +62,104 @@ cv2.destroyAllWindows()
 
 ---
 
-## Diferencia con el Programa 07
+## Diferencias respecto al Programa 07
 
-Solo cambian dos cosas:
+Este programa añade dos cambios sobre el programa 07:
 
-| Aspecto | Prog 07 (MP4) | Prog 08 (MKV) |
-|---|---|---|
-| Codec FourCC | `"mp4v"` | `"XVID"` |
-| Extensión del archivo | `.mp4` | `.mkv` |
+### Cambio 1: codec y extensión (MP4 → MKV)
 
 ```python
-# Programa 07:
+# Programa 07 (MP4):
 fourcc         = cv2.VideoWriter_fourcc(*"mp4v")
 nombre_archivo = f"video_{timestamp}.mp4"
 
-# Programa 08:
+# Programa 08 (MKV):
 fourcc         = cv2.VideoWriter_fourcc(*"XVID")
 nombre_archivo = f"video_{timestamp}.mkv"
 ```
 
+### Cambio 2: efecto espejo antes de grabar
+
+```python
+frame = cv2.flip(frame, 1)   # se aplica ANTES de writer.write()
+
+if grabando and writer is not None:
+    writer.write(frame)      # graba el frame ya volteado
+```
+
+> **Por qué el orden importa:**
+> Si `flip` se aplica **antes** de `write`, el video grabado queda en espejo.
+> Si `flip` se aplica **después** de `write`, la pantalla muestra espejo pero el archivo graba la imagen original.
+
 ---
 
-## Concepto: contenedor vs codec
+## Concepto: contenedor MKV vs MP4
 
-Es importante distinguir dos conceptos que a menudo se confunden:
-
-| Concepto | Descripción | Ejemplos |
+| Característica | MKV (Matroska) | MP4 |
 |---|---|---|
-| **Contenedor** | El formato del archivo — cómo se empaquetan los datos | `.mp4`, `.mkv`, `.avi` |
-| **Codec** | El algoritmo de compresión del video | `XVID`, `H.264`, `MJPG` |
+| Licencia | Completamente libre y abierto | Algunas partes con patentes |
+| Resistencia a corrupción | Alta — puede recuperar video si se corta | Menor — puede corromperse sin `release()` |
+| Soporte de múltiples pistas | Nativo (video, audio, subtítulos, capítulos) | Limitado |
+| Compatibilidad | Muy alta (VLC, MPV, Firefox, etc.) | Universal |
+| Uso típico | Video general en Linux | Distribución masiva, web, móvil |
 
-Un contenedor puede soportar múltiples codecs. Por ejemplo:
-- `.mkv` puede contener video XVID, H.264, VP9, etc.
-- `.mp4` puede contener H.264, MPEG-4, etc.
+### ¿Por qué MKV es más resistente a corrupción?
 
-En OpenCV, **el codec se declara con FourCC** y la extensión del archivo define
-el contenedor. OpenCV no siempre valida que el codec sea compatible con el
-contenedor — si la combinación es incorrecta el archivo puede quedar vacío
-o corrupto.
+MP4 escribe los metadatos (índice de frames, duración, etc.) **al final del archivo** cuando se llama `release()`. Si el programa termina abruptamente sin llamarlo, esos metadatos nunca se escriben y el archivo queda ilegible.
+
+MKV escribe los metadatos **de forma distribuida** a lo largo del archivo. Si se interrumpe, la mayoría del video ya grabado es recuperable.
 
 ---
 
-## Combinaciones probadas y confiables en Linux/Ubuntu
+## Codec XVID
 
-| Codec FourCC | Extensión | Notas |
+XVID es una implementación libre del estándar de compresión MPEG-4 Part 2.
+
+```python
+fourcc = cv2.VideoWriter_fourcc(*"XVID")
+```
+
+| Característica | XVID |
+|---|---|
+| Licencia | GPL (libre) |
+| Calidad | Alta para su tamaño |
+| Velocidad de codificación | Rápida |
+| Compatibilidad | Muy alta (VLC, reproductores de TV, etc.) |
+| Extensiones | `.avi`, `.mkv` |
+
+**Comparación con otros codecs:**
+
+```python
+# mp4v → MPEG-4 Part 2, mejor con .mp4
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+writer = cv2.VideoWriter("salida.mp4", fourcc, fps, (ancho, alto))
+
+# XVID → MPEG-4 Part 2 libre, mejor con .avi o .mkv
+fourcc = cv2.VideoWriter_fourcc(*"XVID")
+writer = cv2.VideoWriter("salida.mkv", fourcc, fps, (ancho, alto))
+
+# MJPG → frames JPEG concatenados, archivos grandes pero rápido de codificar
+fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+writer = cv2.VideoWriter("salida.avi", fourcc, fps, (ancho, alto))
+```
+
+---
+
+## Tabla resumen: combinaciones de codec + contenedor en Linux
+
+| Codec FourCC | Extensión | Resultado |
 |---|---|---|
 | `mp4v` | `.mp4` | Compatible en casi todos los reproductores |
-| `XVID` | `.mkv` | Buena calidad, funciona bien con VLC |
-| `XVID` | `.avi` | El combo más clásico |
-| `MJPG` | `.avi` | Frames JPEG concatenados, archivos grandes |
-| `avc1` | `.mp4` | H.264 — mejor compresión, requiere soporte del sistema |
-
-> **Por qué XVID para MKV:** XVID es un codec libre ampliamente soportado.
-> MKV (Matroska) es un contenedor abierto sin restricciones de licencia.
-> La combinación es robusta en Linux sin necesidad de librerías adicionales.
-
----
-
-## Ventajas de MKV sobre MP4
-
-| Característica | MKV | MP4 |
-|---|---|---|
-| Licencia | Libre y abierto | Patentes en algunos codecs |
-| Recuperación ante cortes | Mejor — puede recuperarse si se corta la grabación | Puede corromperse si no se cierra bien |
-| Soporte de subtítulos/capítulos | Nativo | Limitado |
-| Compatibilidad con reproductores | Muy alta (VLC, MPV, etc.) | Universal |
-
-> MKV es más resistente a corrupción si el programa termina abruptamente
-> sin llamar `writer.release()`, aunque siempre es mejor cerrarlo correctamente.
+| `XVID` | `.mkv` | Este programa — libre y resistente a corrupción |
+| `XVID` | `.avi` | Clásico, muy compatible |
+| `MJPG` | `.avi` | Archivos grandes, muy rápido de codificar |
+| `avc1` | `.mp4` | H.264, mejor compresión (puede requerir librerías extra) |
 
 ---
 
 ## Conceptos clave
 
-- El contenedor (`.mkv`) y el codec (`XVID`) son cosas distintas.
-- Solo cambia el FourCC y la extensión respecto al programa 07 — la lógica es idéntica.
+- El contenedor (`.mkv`) y el codec (`XVID`) son conceptos distintos.
+- `cv2.flip(frame, 1)` debe ir **antes** de `writer.write()` para que el espejo quede grabado.
+- MKV es más resistente a corrupción que MP4 si el programa termina sin llamar `release()`.
 - `XVID` + `.mkv` es una combinación confiable en Linux sin dependencias extra.
-- MKV tolera mejor los cierres abruptos que MP4.

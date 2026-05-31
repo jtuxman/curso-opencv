@@ -10,7 +10,12 @@ fps = cap.get(cv2.CAP_PROP_FPS)
 if fps == 0:
     fps = 30.0
 
+# XVID es un codec libre de alta calidad compatible con el contenedor MKV.
+# MKV (Matroska) es un formato de contenedor abierto sin restricciones de licencia.
+# A diferencia de MP4, MKV es mas resistente a corrupcion si el programa
+# se cierra abruptamente sin llamar writer.release().
 fourcc = cv2.VideoWriter_fourcc(*"XVID")
+
 grabando = False
 writer = None
 
@@ -22,8 +27,13 @@ while True:
     if not ret:
         break
 
+    # cv2.flip(frame, 1) voltea la imagen horizontalmente (efecto espejo).
+    # flipCode 1 = volteo en eje vertical (izquierda <-> derecha).
+    # Se aplica ANTES de writer.write() para que el video grabado
+    # tambien quede en espejo, no solo la vista en pantalla.
     frame = cv2.flip(frame, 1)
 
+    # Escribimos el frame ya volteado al archivo de video
     if grabando and writer is not None:
         writer.write(frame)
 
@@ -39,6 +49,9 @@ while True:
     if key == ord("r"):
         if not grabando:
             timestamp = time.strftime("%Y%m%d_%H%M%S")
+
+            # La extension .mkv define el contenedor; el codec XVID define
+            # el algoritmo de compresion interno. Son dos cosas distintas.
             nombre_archivo = f"video_{timestamp}.mkv"
             writer = cv2.VideoWriter(nombre_archivo, fourcc, fps, (ancho, alto))
             grabando = True
@@ -52,6 +65,7 @@ while True:
     elif key == ord("q"):
         break
 
+# Cerramos el archivo si el usuario sale mientras esta grabando
 if writer is not None:
     writer.release()
 

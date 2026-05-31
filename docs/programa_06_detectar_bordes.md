@@ -1,6 +1,6 @@
 # Programa 06 — Detección de bordes con Canny
 
-Detecta bordes en tiempo real usando el algoritmo Canny. Presiona `m` para alternar entre la imagen original y los bordes detectados. Presiona `q` para salir.
+Detecta bordes en tiempo real usando el algoritmo Canny. Presiona `m` para alternar entre la imagen original y los bordes. Presiona `q` para salir.
 
 ```python
 import cv2
@@ -9,7 +9,6 @@ cap = cv2.VideoCapture(0)
 
 umbral1 = 50
 umbral2 = 150
-
 mostrar_bordes = True
 
 while True:
@@ -49,31 +48,32 @@ cv2.destroyAllWindows()
 
 ## Concepto: ¿qué es un borde?
 
-Un **borde** en una imagen es una zona donde la intensidad de los píxeles cambia
-bruscamente. Por ejemplo, el límite entre un objeto oscuro y un fondo claro.
+Un **borde** en una imagen es una zona donde la intensidad de los píxeles cambia bruscamente. Por ejemplo, el límite entre un objeto oscuro y un fondo claro.
 
-Canny detecta esos cambios calculando el **gradiente** (la derivada) de la imagen:
-zonas con gradiente alto son bordes.
+```
+Fondo claro (200) → borde → Objeto oscuro (30)
+[200][200][200][150][80][30][30][30]
+                 ↑ borde aquí (cambio brusco)
+```
+
+Matemáticamente, un borde es donde la **derivada** (gradiente) de la intensidad es alta.
 
 ---
 
-## Pipeline del programa (3 pasos antes de Canny)
+## Pipeline de detección (3 pasos)
 
 ```
-frame (BGR)
-    │
-    ▼
-cv2.cvtColor → gris (1 canal)
-    │
-    ▼
-cv2.GaussianBlur → gris suavizado
-    │
-    ▼
-cv2.Canny → bordes (blanco/negro)
+frame (BGR, 3 canales)
+       │
+       ▼ cv2.cvtColor(COLOR_BGR2GRAY)
+gris (1 canal) — necesario porque Canny requiere 1 canal
+       │
+       ▼ cv2.GaussianBlur((5,5), 0)
+gris suavizado — elimina ruido que generaría falsos bordes
+       │
+       ▼ cv2.Canny(umbral1, umbral2)
+bordes (binario: 255=borde, 0=fondo)
 ```
-
-El suavizado previo es fundamental: sin él, el ruido de la cámara genera
-cientos de falsos bordes.
 
 ---
 
@@ -81,71 +81,105 @@ cientos de falsos bordes.
 
 ### `cv2.GaussianBlur(src, ksize, sigmaX)`
 
-Aplica un desenfoque gaussiano para suavizar la imagen y reducir ruido.
+Aplica un desenfoque gaussiano para reducir el ruido antes de detectar bordes.
 
 | Parámetro | Tipo | Descripción |
 |---|---|---|
-| `src` | `ndarray` | Imagen de entrada. |
-| `ksize` | `tuple (ancho, alto)` | Tamaño del kernel. Debe ser impar y positivo: `(3,3)`, `(5,5)`, `(7,7)`... |
+| `src` | `ndarray` | Imagen de entrada (1 o 3 canales). |
+| `ksize` | `tuple (w, h)` | Tamaño del kernel. Ambos valores deben ser **impares y positivos**. |
 | `sigmaX` | `float` | Desviación estándar en X. `0` = calculada automáticamente desde `ksize`. |
 
-**Retorna:** `ndarray` — imagen suavizada.
+**Retorna:** `ndarray` — imagen suavizada. No modifica la original.
+
+**Ejemplos:**
 
 ```python
-suave = cv2.GaussianBlur(gris, (5, 5), 0)   # kernel 5x5
-suave = cv2.GaussianBlur(gris, (11, 11), 0) # más suave
-suave = cv2.GaussianBlur(gris, (3, 3), 0)   # menos suave
+# Diferentes niveles de suavizado:
+suave3  = cv2.GaussianBlur(gris, (3, 3), 0)    # suave, casi sin efecto
+suave5  = cv2.GaussianBlur(gris, (5, 5), 0)    # balance para tiempo real
+suave11 = cv2.GaussianBlur(gris, (11, 11), 0)  # muy suave, menos bordes falsos
+suave21 = cv2.GaussianBlur(gris, (21, 21), 0)  # extremo, solo bordes principales
+
+# Kernel asimétrico (poco común pero válido):
+cv2.GaussianBlur(gris, (5, 3), 0)   # más suavizado horizontal que vertical
+
+# Con sigma explícito (mayor sigma = más desenfoque):
+cv2.GaussianBlur(gris, (0, 0), sigmaX=2.0)   # sigma define el área de influencia
+
+# El kernel DEBE ser impar:
+# cv2.GaussianBlur(gris, (4, 4), 0)  ← ERROR: 4 es par
+# cv2.GaussianBlur(gris, (5, 5), 0)  ← CORRECTO
 ```
 
-> **Regla del kernel:** cuanto mayor el tamaño, más suavizado pero más lento.
-> Para detección de bordes en tiempo real `(5, 5)` es un buen balance.
-> El tamaño siempre debe ser **impar** (3, 5, 7, 9...).
+> **¿Por qué es necesario antes de Canny?**
+> La cámara introduce ruido aleatorio en cada frame (pequeñas variaciones de brillo
+> píxel a píxel). Sin suavizar, Canny detecta esas variaciones como "cambios bruscos"
+> y genera cientos de bordes falsos en zonas uniformes. El GaussianBlur los elimina.
 
 ---
 
 ### `cv2.Canny(image, threshold1, threshold2)`
 
-Detecta bordes usando el algoritmo de Canny (1986).
+Detecta bordes usando el algoritmo de John Canny (1986). Es el detector de bordes más usado en visión por computadora.
 
 | Parámetro | Tipo | Descripción |
 |---|---|---|
-| `image` | `ndarray` | Imagen en escala de grises. |
-| `threshold1` | `float` | Umbral inferior (hysteresis). |
-| `threshold2` | `float` | Umbral superior (hysteresis). |
+| `image` | `ndarray` | Imagen en **escala de grises** (1 canal). Pasa error si recibe BGR. |
+| `threshold1` | `float` | Umbral inferior para el criterio de histéresis. |
+| `threshold2` | `float` | Umbral superior para el criterio de histéresis. |
 
-**Retorna:** `ndarray` — imagen binaria: bordes en blanco (255), fondo en negro (0).
+**Retorna:** `ndarray` — imagen binaria: `255` (blanco) = borde, `0` (negro) = fondo.
+
+**Ejemplos:**
 
 ```python
+# Configuraciones para diferentes situaciones:
+
+# Muchos bordes (sensible, captura detalles finos):
+bordes = cv2.Canny(gris, 20, 60)
+
+# Balance general (el más usado):
 bordes = cv2.Canny(gris, 50, 150)
+
+# Pocos bordes (solo los más marcados, imagen más limpia):
+bordes = cv2.Canny(gris, 100, 200)
+
+# Regla práctica: threshold2 ≈ 3 × threshold1
+# threshold1=30  → threshold2=90
+# threshold1=50  → threshold2=150
+# threshold1=100 → threshold2=300
+
+# Canny requiere imagen de 1 canal:
+bordes = cv2.Canny(gris, 50, 150)    # CORRECTO: gris tiene 1 canal
+# bordes = cv2.Canny(frame, 50, 150) # ERROR: frame tiene 3 canales BGR
+
+# Usar la imagen de bordes para contar o analizar contornos:
+contornos, _ = cv2.findContours(bordes, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+print(f"Contornos detectados: {len(contornos)}")
 ```
 
-#### Cómo funcionan los umbrales (hysteresis)
+#### Cómo funcionan los umbrales (histéresis)
 
-Canny clasifica los píxeles en tres categorías:
-
-| Gradiente del píxel | Resultado |
-|---|---|
-| Mayor que `threshold2` | Borde fuerte — siempre incluido |
-| Entre `threshold1` y `threshold2` | Borde débil — incluido solo si conecta con un borde fuerte |
-| Menor que `threshold1` | Descartado |
+El algoritmo clasifica cada píxel según su gradiente (magnitud del cambio de intensidad):
 
 ```
-threshold1=50   threshold2=150
-
-  0 ──── 50 ──────────── 150 ──► gradiente
-  │       │               │
-descarte  débil          fuerte
+Gradiente del píxel:
+  0 ──── threshold1 ──────────── threshold2 ──►
+  │           │                       │
+descarte    borde débil           borde fuerte
+(siempre)   (solo si conecta       (siempre
+             con borde fuerte)      incluido)
 ```
 
-#### Guía para elegir umbrales
+Ejemplo con umbral1=50, umbral2=150:
 
-| Situación | threshold1 | threshold2 |
-|---|---|---|
-| Detectar muchos bordes (sensible) | 20 | 60 |
-| Balance general | 50 | 150 |
-| Solo bordes principales (limpio) | 100 | 200 |
+```
+Gradiente=200 → borde fuerte → incluido siempre ✓
+Gradiente=80  → borde débil  → incluido si toca un borde fuerte ✓/✗
+Gradiente=30  → descartado   → nunca incluido ✗
+```
 
-> **Regla práctica:** `threshold2 ≈ 3 × threshold1` suele dar buenos resultados.
+Este sistema de dos umbrales reduce los bordes ruidosos sin perder los importantes.
 
 ---
 
@@ -156,27 +190,22 @@ mostrar_bordes = True
 
 if key == ord("m"):
     mostrar_bordes = not mostrar_bordes
+# True  → False → True → False → ...
 ```
 
-`not` invierte el valor booleano en cada pulsación. Es el patrón más simple
-para alternar entre dos estados (on/off, original/procesado).
-
----
-
-## Por qué se necesita escala de grises antes de Canny
-
-`cv2.Canny()` solo acepta imágenes de **1 canal**. Si se le pasa una imagen BGR
-(3 canales) lanzará un error. Por eso siempre se convierte primero:
+`not` invierte el valor booleano en cada pulsación. Patrón más simple para toggle on/off.
 
 ```python
-gris = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-bordes = cv2.Canny(gris, 50, 150)
-```
+# Comparación de patrones para alternar estados:
 
-Y para mostrar los bordes con `imshow` junto a texto en color se convierte de vuelta:
+# Patrón con not (2 estados):
+activo = not activo
 
-```python
-salida = cv2.cvtColor(bordes, cv2.COLOR_GRAY2BGR)
+# Patrón con lista y % (N estados):
+modos = ["A", "B", "C"]
+indice = (indice + 1) % len(modos)
+
+# Usar not cuando hay solo 2 opciones; lista+% cuando hay 3 o más.
 ```
 
 ---
@@ -185,8 +214,8 @@ salida = cv2.cvtColor(bordes, cv2.COLOR_GRAY2BGR)
 
 | Aspecto | Prog 01-05 | Prog 06 |
 |---|---|---|
-| Procesamiento de imagen | Mínimo | Pipeline de 3 pasos |
-| Suavizado previo | No | `GaussianBlur` antes de Canny |
+| Procesamiento | Mínimo o conversión simple | Pipeline de 3 pasos |
+| Suavizado previo | No | `GaussianBlur` obligatorio antes de Canny |
 | Detección de bordes | No | `cv2.Canny()` |
 | Alternar vista | Ciclo de lista | Booleano con `not` |
 
@@ -194,8 +223,9 @@ salida = cv2.cvtColor(bordes, cv2.COLOR_GRAY2BGR)
 
 ## Conceptos clave
 
-- Siempre suavizar con `GaussianBlur` antes de `Canny` para eliminar ruido.
-- El kernel de `GaussianBlur` debe ser de tamaño impar.
-- `Canny` requiere imagen en escala de grises (1 canal).
-- `threshold2 ≈ 3 × threshold1` es una buena regla de partida para los umbrales.
-- La imagen de salida de `Canny` es binaria: solo blanco (borde) o negro (fondo).
+- Siempre suavizar con `GaussianBlur` antes de `Canny` — sin esto el ruido genera falsos bordes.
+- El kernel de `GaussianBlur` debe ser de tamaño **impar**.
+- `Canny` requiere imagen en escala de grises (1 canal); pasar BGR causa error.
+- `threshold2 ≈ 3 × threshold1` es una buena regla de partida.
+- La salida de `Canny` es binaria: solo `0` (fondo) o `255` (borde).
+- Convertir la salida de Canny a BGR con `COLOR_GRAY2BGR` antes de dibujar texto en color.

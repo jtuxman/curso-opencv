@@ -1,6 +1,6 @@
 # Programa 09 — Redimensionar frame
 
-Permite cambiar el tamaño del frame en tiempo real entre 5 escalas predefinidas. Presiona `+` para agrandar y `-` para reducir. Muestra la escala activa y las dimensiones reales en pantalla.
+Permite cambiar el tamaño del frame en tiempo real entre 5 escalas. Presiona `+` para agrandar y `-` para reducir. Muestra la escala activa y las dimensiones reales.
 
 ```python
 import cv2
@@ -11,7 +11,7 @@ ancho_original = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 alto_original  = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
 escalas = [0.25, 0.5, 1.0, 1.5, 2.0]
-indice  = 2  # empieza en 1.0
+indice  = 2   # empieza en 1.0
 
 while True:
     ret, frame = cap.read()
@@ -53,108 +53,155 @@ cv2.destroyAllWindows()
 
 ## Función nueva: `cv2.resize(src, dsize, interpolation)`
 
-Cambia el tamaño de una imagen.
+Cambia el tamaño de una imagen a las dimensiones indicadas.
 
 | Parámetro | Tipo | Descripción |
 |---|---|---|
 | `src` | `ndarray` | Imagen de entrada. |
-| `dsize` | `tuple (ancho, alto)` | Dimensiones de salida en píxeles. |
-| `interpolation` | `int` | Algoritmo de interpolación (ver tabla). |
+| `dsize` | `tuple (ancho, alto)` | Dimensiones de salida. **Orden: (ancho, alto)**, no (alto, ancho). |
+| `interpolation` | `int` | Algoritmo para calcular los píxeles nuevos (ver tabla). |
 
-**Retorna:** `ndarray` — imagen redimensionada (no modifica la original).
+**Retorna:** `ndarray` — imagen redimensionada. No modifica la original.
+
+**Ejemplos:**
 
 ```python
 # Tamaño fijo:
-pequeño = cv2.resize(frame, (320, 240))
+pequeño    = cv2.resize(frame, (320, 240))
+grande     = cv2.resize(frame, (1280, 720))
+miniatura  = cv2.resize(frame, (100, 100))   # cambia la proporción si no es cuadrada
 
-# Por escala (calcular dimensiones primero):
-nuevo_ancho = int(frame.shape[1] * 0.5)
-nuevo_alto  = int(frame.shape[0] * 0.5)
+# Por escala (calculando las dimensiones manualmente):
+escala = 0.5
+nuevo_ancho = int(frame.shape[1] * escala)   # shape[1] = columnas = ancho
+nuevo_alto  = int(frame.shape[0] * escala)   # shape[0] = filas    = alto
 mitad = cv2.resize(frame, (nuevo_ancho, nuevo_alto))
-```
 
-> **Importante:** `dsize` es `(ancho, alto)` — orden inverso a `frame.shape`
-> que retorna `(alto, ancho)`. El mismo patrón que en `VideoWriter`.
+# ERROR frecuente — orden incorrecto de dimensiones:
+cv2.resize(frame, (alto, ancho))    # MAL: da una imagen distorsionada
+cv2.resize(frame, (ancho, alto))    # BIEN
+
+# Por qué int() es necesario:
+# frame.shape[1] = 640 (int)
+# 640 * 0.5 = 320.0 (float) ← resize no acepta float
+# int(640 * 0.5) = 320 (int) ← correcto
+
+# Redimensionar y mantener la proporción (aspect ratio):
+alto_deseado = 200
+factor = alto_deseado / frame.shape[0]
+nuevo_ancho = int(frame.shape[1] * factor)
+redim = cv2.resize(frame, (nuevo_ancho, alto_deseado))
+```
 
 ---
 
 ## Métodos de interpolación
 
-Cuando se redimensiona una imagen, los píxeles nuevos deben calcularse a partir
-de los existentes. El método de interpolación define cómo se hace ese cálculo.
+La interpolación define cómo se calculan los nuevos píxeles al cambiar el tamaño.
 
-| Constante | Cuándo usar | Velocidad | Calidad |
-|---|---|---|---|
-| `cv2.INTER_NEAREST` | Prototipado rápido, pixel art | Muy rápida | Baja |
-| `cv2.INTER_LINEAR` | **Agrandar** (escala > 1) | Rápida | Buena |
-| `cv2.INTER_AREA` | **Reducir** (escala < 1) | Media | Muy buena |
-| `cv2.INTER_CUBIC` | Agrandar con alta calidad | Lenta | Alta |
-| `cv2.INTER_LANCZOS4` | Máxima calidad | Muy lenta | Muy alta |
+### Al reducir (escala < 1.0)
 
-### Regla práctica
+```
+Original 4x4:              Reducido 2x2 con INTER_AREA:
+[10][20][30][40]           [15][35]   ← promedio de bloques 2x2
+[50][60][70][80]   →       [55][75]
+[11][21][31][41]
+[51][61][71][81]
+```
+
+`INTER_AREA` promedia los píxeles que "desaparecen", produciendo una imagen suave sin aliasing.
+
+### Al agrandar (escala > 1.0)
+
+```
+Original 2x2:         Agrandado 4x4 con INTER_LINEAR:
+[10][20]       →      [10][13][17][20]   ← interpolación lineal entre vecinos
+[50][60]              [22][26][30][33]
+                      [38][41][45][48]
+                      [50][53][57][60]
+```
+
+`INTER_LINEAR` interpola entre píxeles vecinos para suavizar la ampliación.
+
+### Comparación completa
+
+| Constante | Para | Velocidad | Calidad | Cuándo usar |
+|---|---|---|---|---|
+| `cv2.INTER_NEAREST` | Ambos | Muy rápida | Baja | Prototipado, pixel art, máscaras binarias |
+| `cv2.INTER_LINEAR` | Agrandar | Rápida | Buena | **Tiempo real, escala > 1** |
+| `cv2.INTER_AREA` | Reducir | Media | Muy buena | **Tiempo real, escala < 1** |
+| `cv2.INTER_CUBIC` | Agrandar | Lenta | Alta | Ampliación de alta calidad |
+| `cv2.INTER_LANCZOS4` | Ambos | Muy lenta | Muy alta | Máxima calidad, sin restricción de tiempo |
 
 ```python
+# Regla práctica del programa:
 if escala < 1.0:
-    interpolacion = cv2.INTER_AREA     # reducir → AREA evita aliasing
+    inter = cv2.INTER_AREA      # reducir → AREA para evitar aliasing
 else:
-    interpolacion = cv2.INTER_LINEAR   # agrandar → LINEAR es suficiente
+    inter = cv2.INTER_LINEAR    # agrandar → LINEAR para suavidad
+
+# Para máxima calidad sin importar la velocidad:
+if escala < 1.0:
+    inter = cv2.INTER_AREA
+else:
+    inter = cv2.INTER_CUBIC     # mejor que LINEAR, más lento
+
+# Para máxima velocidad (prototipos):
+inter = cv2.INTER_NEAREST      # siempre, sin importar la escala
 ```
-
-**¿Por qué importa?**
-
-- Al **reducir** con `INTER_LINEAR` aparece *aliasing* (efecto de escalera/moiré).
-  `INTER_AREA` promedia los píxeles vecinos y produce una imagen más suave.
-- Al **agrandar** con `INTER_AREA` el resultado se ve borroso.
-  `INTER_LINEAR` interpola entre píxeles adyacentes y da mejor resultado.
 
 ---
 
-## Cómo se calculan las nuevas dimensiones
+## Concepto: relación entre `frame.shape` y `resize`
+
+Es la misma confusión que en el dibujo pero ahora es crítico para `resize`:
 
 ```python
-escala      = 0.5
-nuevo_ancho = int(ancho_original * escala)   # 640 * 0.5 = 320
-nuevo_alto  = int(alto_original  * escala)   # 480 * 0.5 = 240
-```
+# frame.shape retorna (filas, columnas, canales) = (alto, ancho, canales)
+alto,  ancho  = frame.shape[:2]   # alto=480, ancho=640
 
-Se usa `int()` porque `resize` requiere enteros, y la multiplicación con float
-puede producir un número con decimales (ej. `319.9`).
+# cv2.resize espera (ancho, alto) como dsize:
+cv2.resize(frame, (ancho, alto))   # BIEN: (640, 480)
+cv2.resize(frame, (alto,  ancho))  # MAL:  (480, 640) → imagen girada/distorsionada
+```
 
 ---
 
-## Navegación por lista con límites
+## Patrón de navegación con límites
+
+A diferencia del ciclo infinito del programa 05 (con `%`), aquí se limita el índice dentro del rango de la lista:
 
 ```python
+# Avanzar (no pasar del último):
 if key == ord("+") and indice < len(escalas) - 1:
     indice += 1
+# Con escalas = [0.25, 0.5, 1.0, 1.5, 2.0] (5 elementos):
+# len(escalas) - 1 = 4
+# Si indice=4 y se presiona '+', la condición es False → no cambia
+
+# Retroceder (no bajar de 0):
 elif key == ord("-") and indice > 0:
     indice -= 1
+# Si indice=0 y se presiona '-', la condición es False → no cambia
 ```
 
-A diferencia del programa 05 (que ciclaba con `%`), aquí se limita el índice
-entre `0` y `len(escalas) - 1` para no salir del rango de la lista.
+Comparación de patrones:
 
-| Patrón | Comportamiento |
-|---|---|
-| `(indice + 1) % len(lista)` | Cicla: al llegar al final vuelve al inicio |
-| `if indice < len(lista) - 1: indice += 1` | Para en el último elemento |
+```python
+# Ciclo infinito (programa 05 — N estados que se repiten):
+indice = (indice + 1) % len(lista)   # 0→1→2→3→0→1→...
 
----
-
-## Diferencia con programas anteriores
-
-| Aspecto | Prog 01-08 | Prog 09 |
-|---|---|---|
-| Tamaño del frame | Fijo (el de la cámara) | Variable con `+` y `-` |
-| Función nueva | — | `cv2.resize()` |
-| Interpolación | No aplica | `INTER_AREA` o `INTER_LINEAR` según escala |
-| Navegación por lista | Ciclo (`%`) o booleano | Con límites min/max |
+# Con límites (programa 09 — rango acotado con extremos):
+if indice < len(lista) - 1: indice += 1   # para en el último
+if indice > 0:              indice -= 1   # para en el primero
+```
 
 ---
 
 ## Conceptos clave
 
-- `cv2.resize()` recibe `(ancho, alto)` — no `(alto, ancho)`.
+- `cv2.resize()` recibe `(ancho, alto)` — **no** `(alto, ancho)`.
 - Usar `INTER_AREA` para reducir y `INTER_LINEAR` para agrandar.
 - Convertir siempre a `int()` las dimensiones calculadas con escala flotante.
-- El patrón con límites (`indice > 0`, `indice < len - 1`) evita salirse de la lista.
+- `frame.shape` retorna `(alto, ancho)` — orden inverso al que espera `resize`.
+- El patrón con límites evita salirse del rango de la lista, a diferencia del ciclo con `%`.
