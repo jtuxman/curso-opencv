@@ -1,6 +1,18 @@
-import cv2
+try:
+    import cv2
+except ModuleNotFoundError:
+    raise SystemExit(
+        "No se encontro OpenCV (cv2). Instala las dependencias con:\n"
+        "  python -m pip install -r requirements.txt"
+    )
 
 cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    raise SystemExit(
+        "No se pudo abrir la camara. Verifica que este conectada, "
+        "que no la use otro programa y que tengas permisos sobre el dispositivo."
+    )
 
 # Umbrales del algoritmo Canny para clasificar pixeles como borde o no:
 #   umbral1 (bajo)  -> pixeles con gradiente menor son descartados

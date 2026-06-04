@@ -1,4 +1,10 @@
-import cv2
+try:
+    import cv2
+except ModuleNotFoundError:
+    raise SystemExit(
+        "No se encontro OpenCV (cv2). Instala las dependencias con:\n"
+        "  python -m pip install -r requirements.txt"
+    )
 
 # VideoCapture(0) abre la camara conectada al sistema.
 # El argumento 0 indica el indice del dispositivo:
@@ -6,6 +12,12 @@ import cv2
 #   1, 2, 3... = camaras adicionales en orden de deteccion
 # Tambien acepta una ruta de archivo: VideoCapture("video.mp4")
 cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    raise SystemExit(
+        "No se pudo abrir la camara. Verifica que este conectada, "
+        "que no la use otro programa y que tengas permisos sobre el dispositivo."
+    )
 
 # El loop se ejecuta indefinidamente hasta que el usuario presione 'q'
 # o la camara deje de enviar frames (desconexion, fin de archivo, etc.)

@@ -1,7 +1,19 @@
-import cv2
+try:
+    import cv2
+except ModuleNotFoundError:
+    raise SystemExit(
+        "No se encontro OpenCV (cv2). Instala las dependencias con:\n"
+        "  python -m pip install -r requirements.txt"
+    )
 import time
 
 cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    raise SystemExit(
+        "No se pudo abrir la camara. Verifica que este conectada, "
+        "que no la use otro programa y que tengas permisos sobre el dispositivo."
+    )
 
 ancho = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 alto = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -54,8 +66,14 @@ while True:
             # el algoritmo de compresion interno. Son dos cosas distintas.
             nombre_archivo = f"video_{timestamp}.mkv"
             writer = cv2.VideoWriter(nombre_archivo, fourcc, fps, (ancho, alto))
-            grabando = True
-            print(f"Grabando: {nombre_archivo}")
+
+            if writer.isOpened():
+                grabando = True
+                print(f"Grabando: {nombre_archivo}")
+            else:
+                writer.release()
+                writer = None
+                print(f"No se pudo crear el archivo de video: {nombre_archivo}")
         else:
             grabando = False
             writer.release()

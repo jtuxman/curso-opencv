@@ -1,7 +1,19 @@
-import cv2
+try:
+    import cv2
+except ModuleNotFoundError:
+    raise SystemExit(
+        "No se encontro OpenCV (cv2). Instala las dependencias con:\n"
+        "  python -m pip install -r requirements.txt"
+    )
 import time  # modulo de la libreria estandar para trabajar con fechas y horas
 
 cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    raise SystemExit(
+        "No se pudo abrir la camara. Verifica que este conectada, "
+        "que no la use otro programa y que tengas permisos sobre el dispositivo."
+    )
 
 print("Presiona 's' para guardar una captura, 'q' para salir")
 
@@ -44,9 +56,13 @@ while True:
         #   .png -> sin perdida de calidad (recomendado para capturas)
         #   .jpg -> con compresion (archivos mas pequenos pero pierde calidad)
         #   .bmp -> sin compresion (archivos grandes)
-        cv2.imwrite(nombre_archivo, frame)
-        print(f"Captura guardada: {nombre_archivo}")
-        contador += 1
+        guardado = cv2.imwrite(nombre_archivo, frame)
+
+        if guardado:
+            print(f"Captura guardada: {nombre_archivo}")
+            contador += 1
+        else:
+            print(f"No se pudo guardar la captura: {nombre_archivo}")
 
     elif key == ord("q"):
         break

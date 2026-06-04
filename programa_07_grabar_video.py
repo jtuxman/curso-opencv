@@ -1,7 +1,19 @@
-import cv2
+try:
+    import cv2
+except ModuleNotFoundError:
+    raise SystemExit(
+        "No se encontro OpenCV (cv2). Instala las dependencias con:\n"
+        "  python -m pip install -r requirements.txt"
+    )
 import time
 
 cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    raise SystemExit(
+        "No se pudo abrir la camara. Verifica que este conectada, "
+        "que no la use otro programa y que tengas permisos sobre el dispositivo."
+    )
 
 # Leemos las dimensiones de la camara ANTES del loop.
 # VideoWriter necesita conocer el tamanio exacto de los frames
@@ -66,8 +78,14 @@ while True:
             # Argumentos: (archivo, fourcc, fps, (ancho, alto))
             # ATENCION: el tamanio es (ancho, alto), NO (alto, ancho) como en shape
             writer = cv2.VideoWriter(nombre_archivo, fourcc, fps, (ancho, alto))
-            grabando = True
-            print(f"Grabando: {nombre_archivo}")
+
+            if writer.isOpened():
+                grabando = True
+                print(f"Grabando: {nombre_archivo}")
+            else:
+                writer.release()
+                writer = None
+                print(f"No se pudo crear el archivo de video: {nombre_archivo}")
         else:
             # Detenemos la grabacion.
             # writer.release() finaliza la escritura del archivo y cierra los

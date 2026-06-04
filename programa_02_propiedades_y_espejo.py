@@ -1,7 +1,19 @@
-import cv2
+try:
+    import cv2
+except ModuleNotFoundError:
+    raise SystemExit(
+        "No se encontro OpenCV (cv2). Instala las dependencias con:\n"
+        "  python -m pip install -r requirements.txt"
+    )
 
 # Abre la camara con indice 0 (camara por defecto)
 cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    raise SystemExit(
+        "No se pudo abrir la camara. Verifica que este conectada, "
+        "que no la use otro programa y que tengas permisos sobre el dispositivo."
+    )
 
 # cap.get(propId) lee una propiedad del dispositivo de captura.
 # Siempre retorna float, por eso se convierte a int para mostrar valores enteros.
